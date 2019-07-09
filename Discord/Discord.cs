@@ -6,15 +6,16 @@ using DiscordRPC.Message;
 using DiscordRPC.Unity;
 using UnityEngine;
 using R2API;
+using System;
+
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.0.0")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.1.1")]
 
 	public class Discord : BaseUnityPlugin
 	{
-
 		enum PrivacyLevel
 		{
 			Disabled = 0,
@@ -24,7 +25,8 @@ namespace DiscordRichPresence
 
 		DiscordRpcClient client;
 
-		static PrivacyLevel currentPrivacyLevel;
+		static PrivacyLevel currentPrivacyLevel;	
+		static DateTimeOffset runStartTime;
 
 		public void Awake()
 		{
@@ -69,13 +71,12 @@ namespace DiscordRichPresence
 				CommandHelper.RegisterCommands(self);
 				orig(self);
 			};
-
 		}
 
 		//Remove any lingering hooks and dispose of discord client connection
 		public void Dispose()
 		{
-			On.RoR2.Run.BeginStage += Run_BeginStage;
+			On.RoR2.Run.BeginStage -= Run_BeginStage;
 
 			On.RoR2.SteamworksLobbyManager.OnLobbyCreated -= SteamworksLobbyManager_OnLobbyCreated;
 			On.RoR2.SteamworksLobbyManager.OnLobbyJoined -= SteamworksLobbyManager_OnLobbyJoined;
@@ -135,6 +136,7 @@ namespace DiscordRichPresence
 		private void Client_OnJoinRequested(object sender, JoinRequestMessage args)
 		{
 			Logger.LogInfo(string.Format("User {0} asked to join lobby", args.User.Username));
+			Chat.AddMessage(string.Format("Discord user {0} has asked to join your game!", args.User.Username));
 			//Always let people into your game for now
 			client.Respond(args, true);
 		}
@@ -151,16 +153,15 @@ namespace DiscordRichPresence
 			Logger.LogInfo("Discord Rich Presence Ready - User: " + args.User.Username);
 		}
 
+		//Currently, presence isn't cleared on run/lobby exit - TODO
 		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig)
 		{
-
 			//if (Facepunch.Steamworks.Client.Instance == null)
 			//	return;
 			//Clear for now
 			//if (client != null && client.CurrentPresence != null)
 			//client.ClearPresence();
 			orig();
-
 		}
 
 		//TODO - Refactor these as they all update the Presence with the same data
@@ -218,6 +219,10 @@ namespace DiscordRichPresence
 		//When the game begins a new stage, update presence
 		private void Run_BeginStage(On.RoR2.Run.orig_BeginStage orig, Run self)
 		{
+			//Grab the run start time (elapsed time does not take into account timer freeze from intermissions yet)
+			//Also runs a little fast - find a better hook point!
+			if (self.stageClearCount == 0)
+				runStartTime = DateTimeOffset.Now;
 			if (currentPrivacyLevel != PrivacyLevel.Disabled)
 			{
 				SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
@@ -230,8 +235,12 @@ namespace DiscordRichPresence
 						LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
 						//add player character here!
 					},
+					Timestamps = new Timestamps()
+					{
+						StartUnixMilliseconds = (ulong)runStartTime.ToUnixTimeMilliseconds()
+					},
 					State = "Classic Run",
-					Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken)),
+					Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
 				};
 				client.SetPresence(presence);
 			}
@@ -253,7 +262,7 @@ namespace DiscordRichPresence
 			if(parse)
 				currentPrivacyLevel = (PrivacyLevel)level; //unchecked
 			else
-				Debug.LogError("Failed to parse arg - must be integer value 0-2");
+				Debug.LogError("Failed to parse arg - must be integer value");
 			
 			//TODO - if disabled, clear presence
 		}
