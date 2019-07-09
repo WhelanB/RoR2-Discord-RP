@@ -7,6 +7,14 @@ using DiscordRPC.Unity;
 using UnityEngine;
 using R2API;
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Xml.Linq;
+using RoR2.ConVar;
+using RoR2.Networking;
+using Unity;
+using UnityEngine.Networking;
 
 namespace DiscordRichPresence
 {
@@ -26,13 +34,12 @@ namespace DiscordRichPresence
 		DiscordRpcClient client;
 
 		static PrivacyLevel currentPrivacyLevel;	
-		static DateTimeOffset runStartTime;
-
+		static ulong runStartTime;
+		
 		public void Awake()
 		{
 			Logger.LogInfo("Starting Discord Rich Presence...");
 			UnityNamedPipe pipe = new UnityNamedPipe();
-
 			//Get your own clientid!
 			client = new DiscordRpcClient("597759084187484160", -1, null, true, pipe);
 			client.RegisterUriScheme("632360");
@@ -118,6 +125,12 @@ namespace DiscordRichPresence
 			}
 
 			return presence;
+		}
+
+		public void Update()
+		{
+			if (Input.GetKeyDown(KeyCode.R))
+				Run.instance.AdvanceStage("bazaar");
 		}
 
 		//Be kind, rewind!
@@ -221,28 +234,33 @@ namespace DiscordRichPresence
 		{
 			//Grab the run start time (elapsed time does not take into account timer freeze from intermissions yet)
 			//Also runs a little fast - find a better hook point!
-			if (self.stageClearCount == 0)
-				runStartTime = DateTimeOffset.Now;
+
 			if (currentPrivacyLevel != PrivacyLevel.Disabled)
 			{
 				SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
 
-				RichPresence presence = new RichPresence()
+				if (scene != null)
 				{
-					Assets = new DiscordRPC.Assets()
+					RichPresence presence = new RichPresence()
 					{
-						LargeImageKey = scene.sceneName,
-						LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
-						//add player character here!
-					},
-					Timestamps = new Timestamps()
+						Assets = new DiscordRPC.Assets()
+						{
+							LargeImageKey = scene.sceneName,
+							LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
+							//add player character here!
+						},
+						State = "Classic Run",
+						Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
+					};
+					if (scene.sceneType == SceneType.Stage)
 					{
-						StartUnixMilliseconds = (ulong)runStartTime.ToUnixTimeMilliseconds()
-					},
-					State = "Classic Run",
-					Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
-				};
-				client.SetPresence(presence);
+						presence.Timestamps = new Timestamps()
+						{
+							StartUnixMilliseconds = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds() - ((ulong)self.GetRunStopwatch())
+						};
+					}
+					client.SetPresence(presence);
+				}
 			}
 			orig(self);
 		}
