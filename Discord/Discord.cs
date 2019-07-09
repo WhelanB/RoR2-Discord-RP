@@ -6,11 +6,13 @@ using DiscordRPC.Message;
 using DiscordRPC.Unity;
 using UnityEngine;
 using R2API;
+using System;
+
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.0.0")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.1.0")]
 
 	public class Discord : BaseUnityPlugin
 	{
@@ -25,6 +27,7 @@ namespace DiscordRichPresence
 		DiscordRpcClient client;
 
 		static PrivacyLevel currentPrivacyLevel;
+		static DateTime elapsedTime;
 
 		public void Awake()
 		{
@@ -70,6 +73,14 @@ namespace DiscordRichPresence
 				orig(self);
 			};
 
+			Run.onRunStartGlobal += Run_onRunStartGlobal;
+
+		}
+
+		private void Run_onRunStartGlobal(Run obj)
+		{
+			//RoR2 freezes timer during intermissions, but for now just show total elapsed time of run
+			elapsedTime = DateTime.Now;
 		}
 
 		//Remove any lingering hooks and dispose of discord client connection
@@ -232,6 +243,10 @@ namespace DiscordRichPresence
 					},
 					State = "Classic Run",
 					Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken)),
+					Timestamps = new Timestamps()
+					{
+						Start = elapsedTime
+					}
 				};
 				client.SetPresence(presence);
 			}
