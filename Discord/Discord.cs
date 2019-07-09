@@ -5,6 +5,7 @@ using DiscordRPC;
 using DiscordRPC.Message;
 using DiscordRPC.Unity;
 using UnityEngine;
+using R2API;
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
@@ -13,8 +14,17 @@ namespace DiscordRichPresence
 
 	public class Discord : BaseUnityPlugin
 	{
+
+		enum PrivacyLevel
+		{
+			Disabled = 0,
+			Presence = 1,
+			Join = 2
+		}
+
 		DiscordRpcClient client;
 
+		static PrivacyLevel currentPrivacyLevel;
 
 		public void Awake()
 		{
@@ -25,6 +35,8 @@ namespace DiscordRichPresence
 			client = new DiscordRpcClient("597759084187484160", -1, null, true, pipe);
 			client.RegisterUriScheme("632360");
 			client.Initialize();
+
+			currentPrivacyLevel = PrivacyLevel.Join;
 
 			//Subscribe to join events
 			client.Subscribe(DiscordRPC.EventType.Join);
@@ -51,12 +63,66 @@ namespace DiscordRichPresence
 			//Handle Presence when user leaves Lobby
 			On.RoR2.SteamworksLobbyManager.LeaveLobby += SteamworksLobbyManager_LeaveLobby;
 
+			//Register console commands
+			On.RoR2.Console.Awake += (orig, self) =>
+			{
+				CommandHelper.RegisterCommands(self);
+				orig(self);
+			};
+
+		}
+
+		//Remove any lingering hooks and dispose of discord client connection
+		public void Dispose()
+		{
+			On.RoR2.Run.BeginStage += Run_BeginStage;
+
+			On.RoR2.SteamworksLobbyManager.OnLobbyCreated -= SteamworksLobbyManager_OnLobbyCreated;
+			On.RoR2.SteamworksLobbyManager.OnLobbyJoined -= SteamworksLobbyManager_OnLobbyJoined;
+			On.RoR2.SteamworksLobbyManager.OnLobbyChanged -= SteamworksLobbyManager_OnLobbyChanged;
+			On.RoR2.SteamworksLobbyManager.LeaveLobby -= SteamworksLobbyManager_LeaveLobby;
+
+			client.Unsubscribe(DiscordRPC.EventType.Join);
+			client.Unsubscribe(DiscordRPC.EventType.JoinRequest);
+
+			client.Dispose();
+		}
+
+		public RichPresence BuildLobbyPresence(ulong lobbyID, Facepunch.Steamworks.Client client)
+		{
+			RichPresence presence = new RichPresence()
+			{
+				State = "In Lobby",
+				Details = "Preparing",
+				Assets = new DiscordRPC.Assets()
+				{
+					LargeImageKey = "lobby",
+					LargeImageText = "Join!",
+
+				},
+				Party = new Party()
+				{
+					ID = client.Username,
+					Max = client.Lobby.MaxMembers,
+					Size = client.Lobby.NumMembers
+				}
+			};
+
+			if (currentPrivacyLevel == PrivacyLevel.Join)
+			{
+				presence.Secrets = new Secrets()
+				{
+					JoinSecret = lobbyID.ToString()
+				};
+			}
+
+			return presence;
 		}
 
 		//Be kind, rewind!
 		public void OnDisable()
 		{
-			client.Dispose();
+			Dispose();
 		}
 
 		private void Client_OnJoin(object sender, JoinMessage args)
@@ -68,6 +134,7 @@ namespace DiscordRichPresence
 		//This is mostly handled through the Discord overlay now, so we can always accept for now
 		private void Client_OnJoinRequested(object sender, JoinRequestMessage args)
 		{
+			Logger.LogInfo(string.Format("User {0} asked to join lobby", args.User.Username));
 			//Always let people into your game for now
 			client.Respond(args, true);
 		}
@@ -75,6 +142,7 @@ namespace DiscordRichPresence
 		private void Client_OnError(object sender, ErrorMessage args)
 		{
 			Logger.LogError(args.Message);
+			Dispose();
 		}
 
 		//Doesn't seem to ever be invoked, other callbacks need to be subscribed to
@@ -106,27 +174,8 @@ namespace DiscordRichPresence
 			if (SteamworksLobbyManager.isInLobby)
 			{
 				Logger.LogInfo("Discord re-broadcasting Steam Lobby");
-				client.SetPresence(new RichPresence()
-				{
-					State = "In Lobby",
-					Details = "Preparing",
-					Assets = new DiscordRPC.Assets()
-					{
-						LargeImageKey = "lobby",
-						LargeImageText = "Join",
-
-					},
-					Secrets = new Secrets()
-					{
-						JoinSecret = Facepunch.Steamworks.Client.Instance.Lobby.CurrentLobby.ToString()
-					},
-					Party = new Party()
-					{
-						ID = Facepunch.Steamworks.Client.Instance.Username,
-						Max = Facepunch.Steamworks.Client.Instance.Lobby.MaxMembers,
-						Size = Facepunch.Steamworks.Client.Instance.Lobby.NumMembers
-					}
-				});
+				ulong lobbyID = Facepunch.Steamworks.Client.Instance.Lobby.CurrentLobby;
+				client.SetPresence(BuildLobbyPresence(lobbyID, Facepunch.Steamworks.Client.Instance));
 			}
 		}
 
@@ -141,27 +190,7 @@ namespace DiscordRichPresence
 
 			ulong lobbyID = Facepunch.Steamworks.Client.Instance.Lobby.CurrentLobby;
 
-			client.SetPresence(new RichPresence()
-			{
-				State = "In Lobby",
-				Details = "Preparing",
-				Assets = new DiscordRPC.Assets()
-				{
-					LargeImageKey = "lobby",
-					LargeImageText = "Join",
-
-				},
-				Secrets = new Secrets()
-				{
-					JoinSecret = lobbyID.ToString()
-				},
-				Party = new Party()
-				{
-					ID = Facepunch.Steamworks.Client.Instance.Username,
-					Max = Facepunch.Steamworks.Client.Instance.Lobby.MaxMembers,
-					Size = Facepunch.Steamworks.Client.Instance.Lobby.NumMembers
-				}
-			});
+			client.SetPresence(BuildLobbyPresence(lobbyID, Facepunch.Steamworks.Client.Instance));
 		}
 
 		private void SteamworksLobbyManager_OnLobbyCreated(On.RoR2.SteamworksLobbyManager.orig_OnLobbyCreated orig, bool success)
@@ -174,29 +203,7 @@ namespace DiscordRichPresence
 			ulong lobbyID = Facepunch.Steamworks.Client.Instance.Lobby.CurrentLobby;
 
 			Logger.LogInfo("Discord broadcasting new Steam lobby" + lobbyID);
-			client.SetPresence(new RichPresence()
-			{
-				State = "In Lobby",
-				Details = "Preparing",
-				Assets = new DiscordRPC.Assets()
-				{
-					LargeImageKey = "lobby",
-					LargeImageText = "Join!",
-
-				},
-				Secrets = new Secrets()
-				{
-					JoinSecret = lobbyID.ToString()
-				},
-				Party = new Party()
-				{
-					ID = Facepunch.Steamworks.Client.Instance.Username,
-					Max = Facepunch.Steamworks.Client.Instance.Lobby.MaxMembers,
-					Size = Facepunch.Steamworks.Client.Instance.Lobby.NumMembers
-				}
-			});
-
-
+			client.SetPresence(BuildLobbyPresence(lobbyID, Facepunch.Steamworks.Client.Instance));
 		}
 
 		//If the scene being loaded is a menu scene, remove the presence
@@ -211,20 +218,44 @@ namespace DiscordRichPresence
 		//When the game begins a new stage, update presence
 		private void Run_BeginStage(On.RoR2.Run.orig_BeginStage orig, Run self)
 		{
-			SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
-			
-			client.SetPresence(new RichPresence()
+			if (currentPrivacyLevel != PrivacyLevel.Disabled)
 			{
-				Assets = new DiscordRPC.Assets()
+				SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+
+				RichPresence presence = new RichPresence()
 				{
-					LargeImageKey = scene.sceneName,
-					LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
-					//add player character here!
-				},
-				State = "Classic Run",
-				Details = string.Format("Stage {0} - {1}",(self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken)),
-			});
+					Assets = new DiscordRPC.Assets()
+					{
+						LargeImageKey = scene.sceneName,
+						LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
+						//add player character here!
+					},
+					State = "Classic Run",
+					Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken)),
+				};
+				client.SetPresence(presence);
+			}
 			orig(self);
+		}
+
+		[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
+		private static void SetPrivacyLevel(ConCommandArgs args)
+		{
+			if(args.Count != 1)
+			{
+				Debug.LogError("discord_privacy_level accepts 1 parameter only");
+				return;
+			}
+
+			int level;
+			bool parse = int.TryParse(args[0], out level);
+
+			if(parse)
+				currentPrivacyLevel = (PrivacyLevel)level; //unchecked
+			else
+				Debug.LogError("Failed to parse arg - must be integer value 0-2");
+			
+			//TODO - if disabled, clear presence
 		}
 	}
 }
