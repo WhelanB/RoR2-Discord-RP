@@ -7,20 +7,14 @@ using DiscordRPC.Unity;
 using UnityEngine;
 using R2API;
 using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Xml.Linq;
-using RoR2.ConVar;
-using RoR2.Networking;
-using Unity;
-using UnityEngine.Networking;
+using MonoMod.RuntimeDetour;
+using System.Reflection;
 
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.1.1")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.2.1")]
 
 	public class Discord : BaseUnityPlugin
 	{
@@ -33,8 +27,7 @@ namespace DiscordRichPresence
 
 		DiscordRpcClient client;
 
-		static PrivacyLevel currentPrivacyLevel;	
-		static ulong runStartTime;
+		static PrivacyLevel currentPrivacyLevel;
 		
 		public void Awake()
 		{
@@ -72,12 +65,60 @@ namespace DiscordRichPresence
 			//Handle Presence when user leaves Lobby
 			On.RoR2.SteamworksLobbyManager.LeaveLobby += SteamworksLobbyManager_LeaveLobby;
 
+			On.RoR2.CharacterBody.Awake += CharacterBody_Awake;
+
+
+			//Messy work around for hiding timer in Discord when user pauses the game during a run
+			RoR2Application.onPauseStartGlobal = (Action)Delegate.Combine(RoR2Application.onPauseStartGlobal, new Action(delegate ()
+			{
+				if(RoR2.Run.instance != null)
+				{
+					if(client.CurrentPresence != null)
+					{
+						SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+						if(scene != null)
+							client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, false));
+					}
+				}
+			}));
+
+			//When the user un-pauses, re-broadcast run time to Discord
+			RoR2Application.onPauseEndGlobal = (Action)Delegate.Combine(RoR2Application.onPauseStartGlobal, new Action(delegate ()
+			{
+				if (RoR2.Run.instance != null)
+				{
+					if (client.CurrentPresence != null)
+					{
+						SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+						if (scene != null)
+							client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, true));
+					}
+				}
+			}));
+
 			//Register console commands
 			On.RoR2.Console.Awake += (orig, self) =>
 			{
 				CommandHelper.RegisterCommands(self);
 				orig(self);
 			};
+		}
+
+		public void OnRunStopwatchPaused(bool isPaused)
+		{
+			Debug.Log("DISCORD " + isPaused);
+		}
+
+		private void CharacterBody_Awake(On.RoR2.CharacterBody.orig_Awake orig, CharacterBody self)
+		{
+			if(self.isClient)
+			{
+				Logger.LogInfo("Client!" + self.GetDisplayName());
+				RichPresence presence = client.CurrentPresence;
+				presence.Assets.SmallImageKey = self.baseNameToken;
+				presence.Assets.SmallImageText = self.GetDisplayName();
+			}
+			orig(self);
 		}
 
 		//Remove any lingering hooks and dispose of discord client connection
@@ -125,12 +166,6 @@ namespace DiscordRichPresence
 			}
 
 			return presence;
-		}
-
-		public void Update()
-		{
-			if (Input.GetKeyDown(KeyCode.R))
-				Run.instance.AdvanceStage("bazaar");
 		}
 
 		//Be kind, rewind!
@@ -234,35 +269,39 @@ namespace DiscordRichPresence
 		{
 			//Grab the run start time (elapsed time does not take into account timer freeze from intermissions yet)
 			//Also runs a little fast - find a better hook point!
-
 			if (currentPrivacyLevel != PrivacyLevel.Disabled)
 			{
 				SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
 
 				if (scene != null)
 				{
-					RichPresence presence = new RichPresence()
-					{
-						Assets = new DiscordRPC.Assets()
-						{
-							LargeImageKey = scene.sceneName,
-							LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
-							//add player character here!
-						},
-						State = "Classic Run",
-						Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
-					};
-					if (scene.sceneType == SceneType.Stage)
-					{
-						presence.Timestamps = new Timestamps()
-						{
-							StartUnixMilliseconds = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds() - ((ulong)self.GetRunStopwatch())
-						};
-					}
-					client.SetPresence(presence);
+					client.SetPresence(BuildRichPresenceForStage(scene, self, true));
 				}
 			}
 			orig(self);
+		}
+
+		public RichPresence BuildRichPresenceForStage(SceneDef scene, Run run, bool includeRunTime)
+		{
+			RichPresence presence = new RichPresence()
+			{
+				Assets = new DiscordRPC.Assets()
+				{
+					LargeImageKey = scene.sceneName,
+					LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
+					//add player character here!
+				},
+				State = "Classic Run",
+				Details = string.Format("Stage {0} - {1}", (run.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
+			};
+			if (scene.sceneType == SceneType.Stage && includeRunTime)
+			{
+				presence.Timestamps = new Timestamps()
+				{
+					StartUnixMilliseconds = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds() - ((ulong)run.GetRunStopwatch())
+				};
+			}
+			return presence;
 		}
 
 		[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
