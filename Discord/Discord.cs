@@ -69,32 +69,10 @@ namespace DiscordRichPresence
 
 
 			//Messy work around for hiding timer in Discord when user pauses the game during a run
-			RoR2Application.onPauseStartGlobal = (Action)Delegate.Combine(RoR2Application.onPauseStartGlobal, new Action(delegate ()
-			{
-				if(RoR2.Run.instance != null)
-				{
-					if(client.CurrentPresence != null)
-					{
-						SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
-						if(scene != null)
-							client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, false));
-					}
-				}
-			}));
+			RoR2Application.onPauseStartGlobal += OnGamePaused;
 
 			//When the user un-pauses, re-broadcast run time to Discord
-			RoR2Application.onPauseEndGlobal = (Action)Delegate.Combine(RoR2Application.onPauseStartGlobal, new Action(delegate ()
-			{
-				if (RoR2.Run.instance != null)
-				{
-					if (client.CurrentPresence != null)
-					{
-						SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
-						if (scene != null)
-							client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, true));
-					}
-				}
-			}));
+			RoR2Application.onPauseEndGlobal += OnGameUnPaused;
 
 			//Register console commands
 			On.RoR2.Console.Awake += (orig, self) =>
@@ -104,9 +82,30 @@ namespace DiscordRichPresence
 			};
 		}
 
-		public void OnRunStopwatchPaused(bool isPaused)
+		public void OnGamePaused()
 		{
-			Debug.Log("DISCORD " + isPaused);
+			if (RoR2.Run.instance != null)
+			{
+				if (client.CurrentPresence != null)
+				{
+					SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+					if (scene != null)
+						client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, false));
+				}
+			}
+		}
+
+		public void OnGameUnPaused()
+		{
+			if (RoR2.Run.instance != null)
+			{
+				if (client.CurrentPresence != null)
+				{
+					SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+					if (scene != null)
+						client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, true));
+				}
+			}
 		}
 
 		private void CharacterBody_Awake(On.RoR2.CharacterBody.orig_Awake orig, CharacterBody self)
@@ -130,6 +129,9 @@ namespace DiscordRichPresence
 			On.RoR2.SteamworksLobbyManager.OnLobbyJoined -= SteamworksLobbyManager_OnLobbyJoined;
 			On.RoR2.SteamworksLobbyManager.OnLobbyChanged -= SteamworksLobbyManager_OnLobbyChanged;
 			On.RoR2.SteamworksLobbyManager.LeaveLobby -= SteamworksLobbyManager_LeaveLobby;
+
+			RoR2Application.onPauseStartGlobal -= OnGamePaused;
+			RoR2Application.onPauseEndGlobal -= OnGameUnPaused;
 
 			client.Unsubscribe(DiscordRPC.EventType.Join);
 			client.Unsubscribe(DiscordRPC.EventType.JoinRequest);
