@@ -14,7 +14,7 @@ namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.2.1")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.3.0")]
 
 	public class Discord : BaseUnityPlugin
 	{
