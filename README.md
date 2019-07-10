@@ -26,7 +26,11 @@ Requires R2API. Extract contents of zip (from Thunderstore) to Risk of Rain 2/Be
 
 ## Versions
 
-Latest 2.1.1 fixes small issues - STABLE
+Latest 2.3.0 fixes elapsed time on pause, adds additional presence for menus
+
+Version 2.2.X introduces proper elapsed run time
+
+Version 2.1.1 fixes small issues - STABLE
 
 Version 2.1.X introduces elapsed run time
 
@@ -35,5 +39,3 @@ Version 2.X.X introduces lobby features
 Versions 1.X.X include run cards only
 
 ## Known Issues
-
-Discord Presence is not reset after exiting run/lobby to menu

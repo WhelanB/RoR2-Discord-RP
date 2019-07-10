@@ -7,20 +7,14 @@ using DiscordRPC.Unity;
 using UnityEngine;
 using R2API;
 using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Xml.Linq;
-using RoR2.ConVar;
-using RoR2.Networking;
-using Unity;
-using UnityEngine.Networking;
+using MonoMod.RuntimeDetour;
+using System.Reflection;
 
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.1.1")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.3.0")]
 
 	public class Discord : BaseUnityPlugin
 	{
@@ -33,8 +27,7 @@ namespace DiscordRichPresence
 
 		DiscordRpcClient client;
 
-		static PrivacyLevel currentPrivacyLevel;	
-		static ulong runStartTime;
+		static PrivacyLevel currentPrivacyLevel;
 		
 		public void Awake()
 		{
@@ -61,7 +54,7 @@ namespace DiscordRichPresence
 			On.RoR2.Run.BeginStage += Run_BeginStage;
 
 			//Used to handle additional potential presence changes
-			//SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
+			SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
 			//Handle Presence when Lobby is created
 			On.RoR2.SteamworksLobbyManager.OnLobbyCreated += SteamworksLobbyManager_OnLobbyCreated;
@@ -72,12 +65,59 @@ namespace DiscordRichPresence
 			//Handle Presence when user leaves Lobby
 			On.RoR2.SteamworksLobbyManager.LeaveLobby += SteamworksLobbyManager_LeaveLobby;
 
+			On.RoR2.CharacterBody.Awake += CharacterBody_Awake;
+
+
+			//Messy work around for hiding timer in Discord when user pauses the game during a run
+			RoR2Application.onPauseStartGlobal += OnGamePaused;
+
+			//When the user un-pauses, re-broadcast run time to Discord
+			RoR2Application.onPauseEndGlobal += OnGameUnPaused;
+
 			//Register console commands
 			On.RoR2.Console.Awake += (orig, self) =>
 			{
 				CommandHelper.RegisterCommands(self);
 				orig(self);
 			};
+		}
+
+		public void OnGamePaused()
+		{
+			if (RoR2.Run.instance != null)
+			{
+				if (client.CurrentPresence != null)
+				{
+					SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+					if (scene != null)
+						client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, false));
+				}
+			}
+		}
+
+		public void OnGameUnPaused()
+		{
+			if (RoR2.Run.instance != null)
+			{
+				if (client.CurrentPresence != null)
+				{
+					SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
+					if (scene != null)
+						client.SetPresence(BuildRichPresenceForStage(scene, RoR2.Run.instance, true));
+				}
+			}
+		}
+
+		private void CharacterBody_Awake(On.RoR2.CharacterBody.orig_Awake orig, CharacterBody self)
+		{
+			if(self.isClient)
+			{
+				Logger.LogInfo("Client!" + self.GetDisplayName());
+				RichPresence presence = client.CurrentPresence;
+				presence.Assets.SmallImageKey = self.baseNameToken;
+				presence.Assets.SmallImageText = self.GetDisplayName();
+			}
+			orig(self);
 		}
 
 		//Remove any lingering hooks and dispose of discord client connection
@@ -89,6 +129,9 @@ namespace DiscordRichPresence
 			On.RoR2.SteamworksLobbyManager.OnLobbyJoined -= SteamworksLobbyManager_OnLobbyJoined;
 			On.RoR2.SteamworksLobbyManager.OnLobbyChanged -= SteamworksLobbyManager_OnLobbyChanged;
 			On.RoR2.SteamworksLobbyManager.LeaveLobby -= SteamworksLobbyManager_LeaveLobby;
+
+			RoR2Application.onPauseStartGlobal -= OnGamePaused;
+			RoR2Application.onPauseEndGlobal -= OnGameUnPaused;
 
 			client.Unsubscribe(DiscordRPC.EventType.Join);
 			client.Unsubscribe(DiscordRPC.EventType.JoinRequest);
@@ -127,12 +170,6 @@ namespace DiscordRichPresence
 			return presence;
 		}
 
-		public void Update()
-		{
-			if (Input.GetKeyDown(KeyCode.R))
-				Run.instance.AdvanceStage("bazaar");
-		}
-
 		//Be kind, rewind!
 		public void OnDisable()
 		{
@@ -169,11 +206,18 @@ namespace DiscordRichPresence
 		//Currently, presence isn't cleared on run/lobby exit - TODO
 		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig)
 		{
-			//if (Facepunch.Steamworks.Client.Instance == null)
-			//	return;
-			//Clear for now
-			//if (client != null && client.CurrentPresence != null)
-			//client.ClearPresence();
+			if (client != null && client.IsInitialized)
+				client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
+				{
+					Assets = new DiscordRPC.Assets()
+					{
+						LargeImageKey = "lobby",
+						LargeImageText = "In Menu",
+
+					},
+					Details = "No Presence",
+					State = "In Menu"
+				});
 			orig();
 		}
 
@@ -223,10 +267,18 @@ namespace DiscordRichPresence
 		//If the scene being loaded is a menu scene, remove the presence
 		private void SceneManager_activeSceneChanged(Scene arg0, Scene arg1)
 		{
-			SceneDef sceneDef = SceneCatalog.GetSceneDefFromScene(arg1);
-			SceneDef oldSceneDef = SceneCatalog.GetSceneDefFromScene(arg0);
-			if (sceneDef != null && oldSceneDef.sceneType == (SceneType.Stage | SceneType.Intermission) && sceneDef.sceneType == SceneType.Menu && client != null)
-				client.ClearPresence();
+			if (client != null && client.IsInitialized && arg1.name == "title")
+				client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
+				{
+					Assets = new DiscordRPC.Assets()
+					{
+						LargeImageKey = "lobby",
+						LargeImageText = "In Menu",
+
+					},
+					Details = "No Presence",
+					State = "In Menu"
+				});
 		}
 
 		//When the game begins a new stage, update presence
@@ -234,35 +286,39 @@ namespace DiscordRichPresence
 		{
 			//Grab the run start time (elapsed time does not take into account timer freeze from intermissions yet)
 			//Also runs a little fast - find a better hook point!
-
 			if (currentPrivacyLevel != PrivacyLevel.Disabled)
 			{
 				SceneDef scene = SceneCatalog.GetSceneDefForCurrentScene();
 
 				if (scene != null)
 				{
-					RichPresence presence = new RichPresence()
-					{
-						Assets = new DiscordRPC.Assets()
-						{
-							LargeImageKey = scene.sceneName,
-							LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
-							//add player character here!
-						},
-						State = "Classic Run",
-						Details = string.Format("Stage {0} - {1}", (self.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
-					};
-					if (scene.sceneType == SceneType.Stage)
-					{
-						presence.Timestamps = new Timestamps()
-						{
-							StartUnixMilliseconds = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds() - ((ulong)self.GetRunStopwatch())
-						};
-					}
-					client.SetPresence(presence);
+					client.SetPresence(BuildRichPresenceForStage(scene, self, true));
 				}
 			}
 			orig(self);
+		}
+
+		public RichPresence BuildRichPresenceForStage(SceneDef scene, Run run, bool includeRunTime)
+		{
+			RichPresence presence = new RichPresence()
+			{
+				Assets = new DiscordRPC.Assets()
+				{
+					LargeImageKey = scene.sceneName,
+					LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
+					//add player character here!
+				},
+				State = "Classic Run",
+				Details = string.Format("Stage {0} - {1}", (run.stageClearCount + 1), RoR2.Language.GetString(scene.nameToken))
+			};
+			if (scene.sceneType == SceneType.Stage && includeRunTime)
+			{
+				presence.Timestamps = new Timestamps()
+				{
+					StartUnixMilliseconds = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds() - ((ulong)run.GetRunStopwatch())
+				};
+			}
+			return presence;
 		}
 
 		[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
