@@ -54,7 +54,7 @@ namespace DiscordRichPresence
 			On.RoR2.Run.BeginStage += Run_BeginStage;
 
 			//Used to handle additional potential presence changes
-			//SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
+			SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
 			//Handle Presence when Lobby is created
 			On.RoR2.SteamworksLobbyManager.OnLobbyCreated += SteamworksLobbyManager_OnLobbyCreated;
@@ -206,11 +206,18 @@ namespace DiscordRichPresence
 		//Currently, presence isn't cleared on run/lobby exit - TODO
 		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig)
 		{
-			//if (Facepunch.Steamworks.Client.Instance == null)
-			//	return;
-			//Clear for now
-			//if (client != null && client.CurrentPresence != null)
-			//client.ClearPresence();
+			if (client != null && client.IsInitialized)
+				client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
+				{
+					Assets = new DiscordRPC.Assets()
+					{
+						LargeImageKey = "lobby",
+						LargeImageText = "In Menu",
+
+					},
+					Details = "No Presence",
+					State = "In Menu"
+				});
 			orig();
 		}
 
@@ -260,10 +267,18 @@ namespace DiscordRichPresence
 		//If the scene being loaded is a menu scene, remove the presence
 		private void SceneManager_activeSceneChanged(Scene arg0, Scene arg1)
 		{
-			SceneDef sceneDef = SceneCatalog.GetSceneDefFromScene(arg1);
-			SceneDef oldSceneDef = SceneCatalog.GetSceneDefFromScene(arg0);
-			if (sceneDef != null && oldSceneDef.sceneType == (SceneType.Stage | SceneType.Intermission) && sceneDef.sceneType == SceneType.Menu && client != null)
-				client.ClearPresence();
+			if (client != null && client.IsInitialized && arg1.name == "title")
+				client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
+				{
+					Assets = new DiscordRPC.Assets()
+					{
+						LargeImageKey = "lobby",
+						LargeImageText = "In Menu",
+
+					},
+					Details = "No Presence",
+					State = "In Menu"
+				});
 		}
 
 		//When the game begins a new stage, update presence
