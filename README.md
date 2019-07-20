@@ -17,7 +17,7 @@ The mod provides a privacy setting via console commands, `discord_privacy_level`
 |---------------|-------|------------------------------------------------------------------------------------|
 | Disabled      | 0     | no rich presence is broadcast                                                      |
 | Run Presence  | 1     | run and lobby information is broadcast, but invites and join requests are disabled |
-| Full Presence |       | run and lobby information is broadcast, invites and join requests are allowed      |
+| Full Presence | 2     | run and lobby information is broadcast, invites and join requests are allowed      |
 
 ## Build
 Requires R2API, BepInEx and [Discord-RPC-Csharp](https://github.com/Lachee/discord-rpc-csharp) (barebones Unity3D dlls, see readme)
