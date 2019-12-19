@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using RoR2;
 using UnityEngine.SceneManagement;
 using DiscordRPC;
@@ -300,11 +300,11 @@ namespace DiscordRichPresence
 
 		public RichPresence BuildRichPresenceForStage(SceneDef scene, Run run, bool includeRunTime)
 		{
-			RichPresence presence = new RichPresence()
-			{
-				Assets = new DiscordRPC.Assets()
-				{
-					LargeImageKey = scene.sceneName,
+            RichPresence presence = new RichPresence()
+            {
+                Assets = new DiscordRPC.Assets()
+                {
+					LargeImageKey = scene.baseSceneName,
 					LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
 					//add player character here!
 				},
