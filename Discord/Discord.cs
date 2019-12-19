@@ -322,7 +322,8 @@ namespace DiscordRichPresence
 		}
 
 		[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
-		private static void SetPrivacyLevel(ConCommandArgs args)
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Code Quality", "IDE0051:Remove unused private members", Justification = "Concommands are often unreferenced.")]
+        private static void SetPrivacyLevel(ConCommandArgs args)
 		{
 			if(args.Count != 1)
 			{
