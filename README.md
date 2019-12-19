@@ -28,7 +28,9 @@ Requires R2API. Extract contents of zip (from Thunderstore) to Risk of Rain 2/Be
 
 ## Versions
 
-Latest 2.3.0 fixes elapsed time on pause, adds additional presence for menus
+Latest 2.3.1 fixes Hidden Realms incompatibility. Fixed by IFixYourRoR2Mods.
+
+Version 2.3.0 fixes elapsed time on pause, adds additional presence for menus
 
 Version 2.2.X introduces proper elapsed run time
 
