@@ -5,18 +5,18 @@ using DiscordRPC;
 using DiscordRPC.Message;
 using DiscordRPC.Unity;
 using UnityEngine;
-using R2API;
 using System;
-using MonoMod.RuntimeDetour;
-using System.Reflection;
+using R2API.Utils;
 
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "2.3.0")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "3.0.0")]
 
-	public class Discord : BaseUnityPlugin
+    [R2APISubmoduleDependency("CommandHelper")]
+
+    public class Discord : BaseUnityPlugin
 	{
 		enum PrivacyLevel
 		{
@@ -31,12 +31,12 @@ namespace DiscordRichPresence
 		
 		public void Awake()
 		{
-			Logger.LogInfo("Starting Discord Rich Presence...");
+			Logger.LogInfo("Starting Discord Rich Presence....");
 			UnityNamedPipe pipe = new UnityNamedPipe();
 			//Get your own clientid!
 			client = new DiscordRpcClient("597759084187484160", -1, null, true, pipe);
 			client.RegisterUriScheme("632360");
-			client.Initialize();
+
 
 			currentPrivacyLevel = PrivacyLevel.Join;
 
@@ -50,8 +50,10 @@ namespace DiscordRichPresence
 			client.OnJoinRequested += Client_OnJoinRequested;
 			client.OnJoin += Client_OnJoin;
 
-			//When a new stage is entered, update stats
-			On.RoR2.Run.BeginStage += Run_BeginStage;
+            client.Initialize();
+
+            //When a new stage is entered, update stats
+            On.RoR2.Run.BeginStage += Run_BeginStage;
 
 			//Used to handle additional potential presence changes
 			SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
@@ -69,16 +71,16 @@ namespace DiscordRichPresence
 
 
 			//Messy work around for hiding timer in Discord when user pauses the game during a run
-			RoR2Application.onPauseStartGlobal += OnGamePaused;
+			RoR2.PauseManager.onPauseStartGlobal += OnGamePaused;
 
 			//When the user un-pauses, re-broadcast run time to Discord
-			RoR2Application.onPauseEndGlobal += OnGameUnPaused;
+			RoR2.PauseManager.onPauseEndGlobal += OnGameUnPaused;
 
 			//Register console commands
 			On.RoR2.Console.Awake += (orig, self) =>
 			{
-				CommandHelper.RegisterCommands(self);
-				orig(self);
+                CommandHelper.AddToConsoleWhenReady();
+                orig(self);
 			};
 		}
 
@@ -130,8 +132,8 @@ namespace DiscordRichPresence
 			On.RoR2.SteamworksLobbyManager.OnLobbyChanged -= SteamworksLobbyManager_OnLobbyChanged;
 			On.RoR2.SteamworksLobbyManager.LeaveLobby -= SteamworksLobbyManager_LeaveLobby;
 
-			RoR2Application.onPauseStartGlobal -= OnGamePaused;
-			RoR2Application.onPauseEndGlobal -= OnGameUnPaused;
+            RoR2.PauseManager.onPauseStartGlobal -= OnGamePaused;
+            RoR2.PauseManager.onPauseEndGlobal -= OnGameUnPaused;
 
 			client.Unsubscribe(DiscordRPC.EventType.Join);
 			client.Unsubscribe(DiscordRPC.EventType.JoinRequest);
@@ -201,7 +203,19 @@ namespace DiscordRichPresence
 		private void Client_OnReady(object sender, ReadyMessage args)
 		{
 			Logger.LogInfo("Discord Rich Presence Ready - User: " + args.User.Username);
-		}
+            if (client != null && client.IsInitialized)
+                client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
+                {
+                    Assets = new DiscordRPC.Assets()
+                    {
+                        LargeImageKey = "lobby",
+                        LargeImageText = "In Menu",
+
+                    },
+                    Details = "No Presence",
+                    State = "In Menu"
+                });
+        }
 
 		//Currently, presence isn't cleared on run/lobby exit - TODO
 		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig)
@@ -304,7 +318,7 @@ namespace DiscordRichPresence
 			{
 				Assets = new DiscordRPC.Assets()
 				{
-					LargeImageKey = scene.sceneName,
+					LargeImageKey = scene.baseSceneName,
 					LargeImageText = RoR2.Language.GetString(scene.subtitleToken)
 					//add player character here!
 				},
@@ -321,7 +335,8 @@ namespace DiscordRichPresence
 			return presence;
 		}
 
-		[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
+        // Temporarily disable concommand until we can port to latest R2API
+		//[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
 		private static void SetPrivacyLevel(ConCommandArgs args)
 		{
 			if(args.Count != 1)
