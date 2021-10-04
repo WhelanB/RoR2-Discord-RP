@@ -15,19 +15,19 @@ Rich presence is provided for Classic Runs. The current stage count and stage na
 
 Example of Presence on Menu:
 
-![Menu Presence Sample](README/NoPresence.png)
+![Menu Presence Sample](/README/NoPresence.PNG)
 
 Example of Presence in run:
 
-![Run Presence Sample](README/Presence.png)
+![Run Presence Sample](README/Presence.PNG)
 
 Example of Presence in Multiplayer Lobby:
 
-![Lobby Presence Sample](README/Lobby.png)
+![Lobby Presence Sample](README/Lobby.PNG)
 
 Example of Channel Invite:
 
-![Invite Presence Sample](README/Invite.png)
+![Invite Presence Sample](README/Invite.PNG)
 
 ## Command
 The mod provides a privacy setting via console commands, `discord_privacy_level`, which takes a single integer as an argument:
