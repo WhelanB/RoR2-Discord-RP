@@ -7,12 +7,13 @@ using DiscordRPC.Unity;
 using UnityEngine;
 using System;
 using R2API.Utils;
+using System.Collections.Generic;
 
 namespace DiscordRichPresence
 {
 	[BepInDependency("com.bepis.r2api")]
 
-	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "3.0.0")]
+	[BepInPlugin("com.whelanb.discord", "Discord Rich Presence", "3.0.1")]
 
 	[R2APISubmoduleDependency("CommandHelper")]
 
@@ -33,50 +34,50 @@ namespace DiscordRichPresence
 		{
 			Logger.LogInfo("Starting Discord Rich Presence....");
 			UnityNamedPipe pipe = new UnityNamedPipe();
-			//Get your own clientid!
+			// Get your own clientid!
 			client = new DiscordRpcClient("", -1, null, true, pipe);
 			client.RegisterUriScheme("632360");
 
 
 			currentPrivacyLevel = PrivacyLevel.Join;
 
-			//Subscribe to join events
+			// Subscribe to join events
 			client.Subscribe(DiscordRPC.EventType.Join);
 			client.Subscribe(DiscordRPC.EventType.JoinRequest);
 
-			//Setup Discord client hooks
+			// Setup Discord client hooks
 			client.OnReady += Client_OnReady;
 			client.OnError += Client_OnError;
 			client.OnJoinRequested += Client_OnJoinRequested;
-			client.OnJoin += Client_OnJoin;
+			// client.OnJoin += Client_OnJoin;
 
 			client.Initialize();
 
-			//When a new stage is entered, update stats
+			// When a new stage is entered, update stats
 			On.RoR2.Run.BeginStage += Run_BeginStage;
 
-			//Used to handle additional potential presence changes
+			// Used to handle additional potential presence changes
 			SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
-			//Handle Presence when Lobby is created
+			// Handle Presence when Lobby is created
 			On.RoR2.SteamworksLobbyManager.OnLobbyCreated += SteamworksLobbyManager_OnLobbyCreated;
-			//Handle Presence when Lobby is joined
+			// Handle Presence when Lobby is joined
 			On.RoR2.SteamworksLobbyManager.OnLobbyJoined += SteamworksLobbyManager_OnLobbyJoined;
-			//Handle Presence when Lobby changes
+			// Handle Presence when Lobby changes
 			On.RoR2.SteamworksLobbyManager.OnLobbyChanged += SteamworksLobbyManager_OnLobbyChanged;
-			//Handle Presence when user leaves Lobby
+			// Handle Presence when user leaves Lobby
 			On.RoR2.SteamworksLobbyManager.LeaveLobby += SteamworksLobbyManager_LeaveLobby;
 
 			On.RoR2.CharacterBody.Awake += CharacterBody_Awake;
 
 
-			//Messy work around for hiding timer in Discord when user pauses the game during a run
+			// Messy work around for hiding timer in Discord when user pauses the game during a run
 			RoR2.PauseManager.onPauseStartGlobal += OnGamePaused;
 
-			//When the user un-pauses, re-broadcast run time to Discord
+			// When the user un-pauses, re-broadcast run time to Discord
 			RoR2.PauseManager.onPauseEndGlobal += OnGameUnPaused;
 
-			//Register console commands
+			// Register console commands
 			On.RoR2.Console.Awake += (orig, self) =>
 			{
 				CommandHelper.AddToConsoleWhenReady();
@@ -181,7 +182,10 @@ namespace DiscordRichPresence
 		private void Client_OnJoin(object sender, JoinMessage args)
 		{
 			Logger.LogInfo("Joining Game via Discord - Steam Lobby ID: " + args.Secret);
-			RoR2.SteamworksLobbyManager.JoinLobby(new CSteamID(ulong.Parse(args.Secret)));
+            ConCommandArgs conArgs = new ConCommandArgs();
+            conArgs.userArgs = new List<string>(){args.Secret};
+            // We use this so we don't have to use the Epic Games SDK
+			RoR2.SteamworksLobbyManager.GetFromPlatformSystems().JoinLobby(conArgs);
 		}
 
 		//This is mostly handled through the Discord overlay now, so we can always accept for now
@@ -218,7 +222,7 @@ namespace DiscordRichPresence
 		}
 
 		//Currently, presence isn't cleared on run/lobby exit - TODO
-		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig)
+		private void SteamworksLobbyManager_LeaveLobby(On.RoR2.SteamworksLobbyManager.orig_LeaveLobby orig, SteamworksLobbyManager self)
 		{
 			if (client != null && client.IsInitialized)
 				client.SetPresence(new RichPresence() //calling client.ClearPresence throws a null ref anywhere it is called - need to investigate more
@@ -232,18 +236,18 @@ namespace DiscordRichPresence
 					Details = "No Presence",
 					State = "In Menu"
 				});
-			orig();
+			orig(self);
 		}
 
 		//TODO - Refactor these as they all update the Presence with the same data
-		private void SteamworksLobbyManager_OnLobbyChanged(On.RoR2.SteamworksLobbyManager.orig_OnLobbyChanged orig)
+		private void SteamworksLobbyManager_OnLobbyChanged(On.RoR2.SteamworksLobbyManager.orig_OnLobbyChanged orig, SteamworksLobbyManager self)
 		{
-			orig();
+			orig(self);
 
 			if (Facepunch.Steamworks.Client.Instance == null)
 				return;
 
-			if (SteamworksLobbyManager.isInLobby)
+			if (self.isInLobby)
 			{
 				Logger.LogInfo("Discord re-broadcasting Steam Lobby");
 				ulong lobbyID = Facepunch.Steamworks.Client.Instance.Lobby.CurrentLobby;
@@ -251,9 +255,9 @@ namespace DiscordRichPresence
 			}
 		}
 
-		private void SteamworksLobbyManager_OnLobbyJoined(On.RoR2.SteamworksLobbyManager.orig_OnLobbyJoined orig, bool success)
+		private void SteamworksLobbyManager_OnLobbyJoined(On.RoR2.SteamworksLobbyManager.orig_OnLobbyJoined orig,SteamworksLobbyManager self,  bool success)
 		{
-			orig(success);
+			orig(self, success);
 
 			if (!success || Facepunch.Steamworks.Client.Instance == null)
 				return;
@@ -265,9 +269,9 @@ namespace DiscordRichPresence
 			client.SetPresence(BuildLobbyPresence(lobbyID, Facepunch.Steamworks.Client.Instance));
 		}
 
-		private void SteamworksLobbyManager_OnLobbyCreated(On.RoR2.SteamworksLobbyManager.orig_OnLobbyCreated orig, bool success)
+		private void SteamworksLobbyManager_OnLobbyCreated(On.RoR2.SteamworksLobbyManager.orig_OnLobbyCreated orig, SteamworksLobbyManager self, bool success)
 		{
-			orig(success);
+			orig(self, success);
 
 			if (!success || Facepunch.Steamworks.Client.Instance == null)
 				return;
@@ -336,7 +340,7 @@ namespace DiscordRichPresence
 		}
 
 		// Temporarily disable concommand until we can port to latest R2API
-		//[ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
+		// [ConCommand(commandName = "discord_privacy_level", flags  = ConVarFlags.None, helpText = "Set the privacy level for Discord (0 is disabled, 1 is presence, 2 is presence + join)")]
 		private static void SetPrivacyLevel(ConCommandArgs args)
 		{
 			if(args.Count != 1)
@@ -353,7 +357,7 @@ namespace DiscordRichPresence
 			else
 				Debug.LogError("Failed to parse arg - must be integer value");
 			
-			//TODO - if disabled, clear presence
+			// TODO - if disabled, clear presence
 		}
 	}
 }
