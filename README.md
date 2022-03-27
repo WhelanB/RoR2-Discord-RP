@@ -49,7 +49,9 @@ Requires R2API, BepInEx and [Discord-RPC-Csharp](https://github.com/Lachee/disco
 
 ## Versions
 
-- Latest 3.0.0 updates mod to support the Risk of Rain 2 Anniversary Update
+- Version 3.0.1 updates mod to support Survivors of the Void
+
+- Version 3.0.0 updates mod to support the Risk of Rain 2 Anniversary Update
 
 - Version 2.3.0 fixes elapsed time on pause, adds additional presence for menus
 
@@ -66,3 +68,7 @@ Requires R2API, BepInEx and [Discord-RPC-Csharp](https://github.com/Lachee/disco
 ## Known Issues
 
 ConCommand currently disabled for Anniversary Update
+
+## Credits
+
+Some stage photos are provided by [The Risk of Rain 2 Fandom Wiki](https://riskofrain2.fandom.com/wiki/Risk_of_Rain_2_Wiki) under [CC BY-NC-SA 3.0](https://www.fandom.com/licensing).

@@ -5,9 +5,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>D:\SteamLibrary\steamapps\common\Risk of Rain 2\Risk of Rain 2_Data\Managed\Assembly-CSharp.dll</HintPath>
-    </Reference>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.0.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="BepInEx.Core" Version="5.4.19" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.2.1-r.0" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.26" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="BepInEx">
       <HintPath>..\libs\BepInEx.dll</HintPath>
     </Reference>
@@ -20,8 +27,8 @@
     <Reference Include="KdTreeLib">
       <HintPath>..\libs\KdTreeLib.dll</HintPath>
     </Reference>
-    <Reference Include="MMHOOK_Assembly-CSharp">
-      <HintPath>..\libs\MMHOOK_Assembly-CSharp.dll</HintPath>
+    <Reference Include="MMHOOK_RoR2">
+      <HintPath>..\libs\MMHOOK_RoR2.dll</HintPath>
     </Reference>
     <Reference Include="Mono.Cecil">
       <HintPath>..\libs\Mono.Cecil.dll</HintPath>
@@ -37,18 +44,6 @@
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\libs\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="pb_Stl">
-      <HintPath>..\libs\pb_Stl.dll</HintPath>
-    </Reference>
-    <Reference Include="Poly2Tri">
-      <HintPath>..\libs\Poly2Tri.dll</HintPath>
-    </Reference>
-    <Reference Include="ProBuilderCore">
-      <HintPath>..\libs\ProBuilderCore.dll</HintPath>
-    </Reference>
-    <Reference Include="ProBuilderMeshOps">
-      <HintPath>..\libs\ProBuilderMeshOps.dll</HintPath>
     </Reference>
     <Reference Include="R2API">
       <HintPath>..\libs\R2API.dll</HintPath>
